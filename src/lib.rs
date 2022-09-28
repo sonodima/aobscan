@@ -228,12 +228,14 @@ impl Pattern {
     /// * `data` - The data to scan.
     /// * `signature` - The signature to search for.
     /// * `mask` - The mask to use for the signature.
+    /// * `chunk_offset` - Starting offset of the chunk, used to calculate the absolute match address.
     /// * `finished` - The atomic flag used to exit the loop early.
     /// * `callback` - The callback to execute when a match is found.
     fn scan_chunk(
         data: &[u8],
         signature: &[u8],
         mask: &[bool],
+        chunk_offset: usize,
         finished: &Arc<AtomicBool>,
         callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
     ) -> bool {
@@ -269,7 +271,7 @@ impl Pattern {
                 // running the callback at the same time.
                 // This should not impact performance too much, as the callback
                 // is only executed when a match is found.
-                if !callback.lock().unwrap().deref_mut()(i) {
+                if !callback.lock().unwrap().deref_mut()(chunk_offset + i) {
                     // If the callback returns false, stop scanning bet.
                     finished.store(true, Ordering::SeqCst);
                     return true;
@@ -346,6 +348,7 @@ impl Pattern {
                         data,
                         &signature,
                         &mask,
+                        range.0,
                         &finished,
                         callback,
                     ) {
