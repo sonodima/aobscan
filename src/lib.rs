@@ -1,5 +1,4 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -236,7 +235,7 @@ impl Pattern {
         signature: &[u8],
         mask: &[bool],
         finished: &Arc<AtomicBool>,
-        mut callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
+        callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
     ) {
         let signature_len = signature.len();
 
@@ -296,8 +295,13 @@ impl Pattern {
         data: &[u8],
         callback: impl FnMut(usize) -> bool + Send + Sync,
     ) -> bool {
+        // Count the number of running threads, so we can wait for them to finish.
         let running_threads = Arc::new(AtomicUsize::new(0));
+
+        // Create an atomic flag to stop all threads if a match is found and accepted.
         let finished = Arc::new(AtomicBool::new(false));
+
+        // Create a mutex for the callback function.
         let callback_arc = Arc::new(Mutex::new(callback));
 
         // Using a thread scope allows us to pass non 'static references to the threads.
@@ -320,7 +324,7 @@ impl Pattern {
                 let signature = self.signature.clone();
                 let mask = self.mask.clone();
 
-                // Clone the variables shared between threads.
+                // Clone the atomic flags and callback function.
                 let running_threads = running_threads.clone();
                 let finished = finished.clone();
                 let callback = callback_arc.clone();
@@ -351,18 +355,111 @@ impl Pattern {
             std::thread::sleep(Duration::from_millis(1));
         }
 
+        // todo: return if a match was found.
+
         true
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rand::RngCore;
+
     use super::*;
 
+    fn random_bytes(len: usize) -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        let mut bytes = vec![0u8; len];
+        rng.fill_bytes(&mut bytes);
+        bytes
+    }
+
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    /// Tests that the multi-threaded scanner can find a certain pattern in a random byte array,
+    /// using both IDA and code style signatures.
+    fn scan_multi_threaded() {
+        // Create a random data buffer.
+        let random_bytes = random_bytes(1024 * 1024 /* 1 MB */);
+
+        // This is an AOB we want to find in the data.
+        // It is going to be placed in the data buffer at the offset 0x2000.
+        let target_offset = 0x2000;
+        let known = b"\x55\x48\x89\xE5\x48\x8B\x00\x00\x00\x00\x00\x8B\x04\x07\x5D\xC3\x55\x48\x89\xE5\x41\x57\x41\x56\x41\x55\x41\x54\x53\x50\x49\x89\xFE";
+
+        unsafe {
+            // Copy the known bytes to the random data buffer.
+            std::ptr::copy(
+                known.as_ptr(),
+                random_bytes.as_ptr().offset(target_offset) as *mut u8,
+                known.len(),
+            );
+        }
+
+        // Run the IDA-style AOB scan.
+        let mut correct = false;
+        let mut result = Pattern::new()
+            .ida_style("55 48 89 E5 ? 8B ? ? 00 ? ? 8B ? ? 5D C3")
+            .unwrap()
+            .with_all_threads()
+            .scan(&random_bytes, |offset| {
+                if offset as isize == target_offset { correct = true; }
+                true
+            });
+
+        assert!(correct);
+        assert!(result);
+
+        // Run the code-style AOB scan.
+        correct = false;
+        result = Pattern::new()
+            .code_style(
+                b"\x55\x48\x89\xE5\x00\x8B\x00\x00\x00\x00\x00\x8B\x00\x00\x5D\xC3",
+                "....?.??.??.??..",
+            )
+            .unwrap()
+            .with_all_threads()
+            .scan(&random_bytes, |offset| {
+                if offset as isize == target_offset { correct = true; }
+                true
+            });
+
+        assert!(correct);
+        assert!(result);
+    }
+
+    #[test]
+    /// Tests that the single-threaded scanner can find a pattern with no wildcards.
+    fn ida_scan_single_threaded() {
+        // Create a random data buffer.
+        let random_bytes = random_bytes(1024 * 1024 /* 1 MB */);
+
+        // This is an AOB we want to find in the data.
+        // It is going to be placed in the data buffer at the offset 0x2000.
+        let target_offset = 0x1000;
+        let known = b"\x55\x48\x89\xE5\x48\x8B";
+
+        unsafe {
+            // Copy the known bytes to the random data buffer.
+            std::ptr::copy(
+                known.as_ptr(),
+                random_bytes.as_ptr().offset(target_offset) as *mut u8,
+                known.len(),
+            );
+        }
+
+        // Match all the bytes.
+        // This is not really a pattern, but it is a good test case.
+        let mut correct = false;
+        let result = Pattern::new()
+            .ida_style("55 48 89 E5 48 8B")
+            .unwrap()
+            .with_all_threads()
+            .scan(&random_bytes, |offset| {
+                if offset as isize == target_offset { correct = true; }
+                true
+            });
+
+        assert!(correct);
+        assert!(result);
     }
 }
-

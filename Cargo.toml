@@ -7,3 +7,6 @@ description = "AOBscan is a library for multi-threaded AOB memory scanning."
 
 [dependencies]
 num_cpus = "1.13"
+
+[dev-dependencies]
+rand = "0.8"
