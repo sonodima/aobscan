@@ -123,8 +123,9 @@ impl Pattern {
                 signature_bytes.push(0);
             } else {
                 mask_bytes.push(true);
+                // todo: handle invalid hex values, maybe return a Result instead of an Option?
                 signature_bytes.push(
-                    u8::from_str_radix(pair, 16).unwrap() // fix
+                    u8::from_str_radix(pair, 16).unwrap()
                 );
             }
         });
@@ -235,8 +236,9 @@ impl Pattern {
         mask: &[bool],
         finished: &Arc<AtomicBool>,
         callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
-    ) {
+    ) -> bool {
         let signature_len = signature.len();
+        let mut found_global = false;
 
         // idea: Store the first non-wildcard byte in the signature, and only
         // search for that byte first.
@@ -249,7 +251,7 @@ impl Pattern {
             // If the running flag is set to false, stop the scan.
             // This is used to stop all threads if a match is found.
             if finished.load(Ordering::SeqCst) {
-                return;
+                return found_global;
             }
 
             // Iterate and compare the signature bytes.
@@ -270,10 +272,14 @@ impl Pattern {
                 if !callback.lock().unwrap().deref_mut()(i) {
                     // If the callback returns false, stop scanning bet.
                     finished.store(true, Ordering::SeqCst);
-                    return;
+                    return true;
+                } else {
+                    found_global = true;
                 }
             }
         }
+
+        found_global
     }
 
     /// Performs the AOB scan in the given slice.<br><br>
@@ -296,11 +302,11 @@ impl Pattern {
     ) -> bool {
         // Count the number of running threads, so we can wait for them to finish.
         let running_threads = Arc::new(AtomicUsize::new(0));
-
-        // Create an atomic flag to stop all threads if a match is found and accepted.
+        // Atomic flag to stop all threads if a match is found and accepted.
         let finished = Arc::new(AtomicBool::new(false));
-
-        // Create a mutex for the callback function.
+        // Atomic flag to check if any threads found a match.
+        let found = Arc::new(AtomicBool::new(false));
+        // Mutex for the callback function.
         let callback_arc = Arc::new(Mutex::new(callback));
 
         // Using a thread scope allows us to pass non 'static references to the threads.
@@ -326,6 +332,7 @@ impl Pattern {
                 // Clone the atomic flags and callback function.
                 let running_threads = running_threads.clone();
                 let finished = finished.clone();
+                let found = found.clone();
                 let callback = callback_arc.clone();
 
                 // Spawn a new worker thread and increment the atomic running thread count.
@@ -335,13 +342,16 @@ impl Pattern {
                     let data = &data[range.0..range.1];
 
                     // Scan the chunk of data.
-                    Self::scan_chunk(
+                    if Self::scan_chunk(
                         data,
                         &signature,
                         &mask,
                         &finished,
                         callback,
-                    );
+                    ) {
+                        // If a match was found, set the found flag to true.
+                        found.store(true, Ordering::SeqCst);
+                    }
 
                     // Thread has finished, decrement the atomic running thread count.
                     running_threads.fetch_sub(1, Ordering::SeqCst);
@@ -354,9 +364,8 @@ impl Pattern {
             std::thread::sleep(Duration::from_millis(1));
         }
 
-        // todo: return if a match was found.
-
-        true
+        // Return true if at least one match was found.
+        found.load(Ordering::SeqCst)
     }
 }
 
@@ -461,5 +470,28 @@ mod tests {
 
         assert!(correct);
         assert!(result);
+    }
+
+    #[test]
+    /// Test that the scanner can properly notify the caller when no matches are found.
+    fn scan_no_matches() {
+        // Create an empty data buffer.
+        let random_bytes = [0u8; 1024 * 1024 /* 1 MB */];
+
+        // Match all the bytes.
+        // This data does not exist in the data buffer, so no matches should be found.
+        let mut called = false;
+        let result = Pattern::new()
+            .ida_style("55 48 89 E5 ? 8C")
+            .unwrap()
+            .with_all_threads()
+            .scan(&random_bytes, |offset| {
+                println!("Found match at offset 0x{:X}", offset);
+                called = true;
+                true
+            });
+
+        assert!(!called);
+        assert!(!result);
     }
 }
