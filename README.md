@@ -1,5 +1,13 @@
 <h1 align="center">AOBscan 📝</h1>
 
+<div align="center">
+  <img src="https://img.shields.io/crates/v/aobscan.svg"/>
+  <img src="https://docs.rs/aobscan/badge.svg"/>
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg"/>
+</div>
+
+<br>
+
 > AOBscan is a library for multi-threaded AOB memory scanning
 
 ## Features
