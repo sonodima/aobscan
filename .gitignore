@@ -1,0 +1,6 @@
+# Rust
+/target
+/Cargo.lock
+
+# macOS Desktop Files
+.DS_Store
