@@ -3,8 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-/// Multi-threaded AOB memory scanner.<br>
-/// Scans for a given pattern in the given data.<br><br>
+/// Multi-threaded AOB memory scanner: scans for a pattern in the given slice.<br><br>
 ///
 /// # Examples
 ///
@@ -367,6 +366,7 @@ mod tests {
 
     use super::*;
 
+    //noinspection ALL
     fn random_bytes(len: usize) -> Vec<u8> {
         let mut rng = rand::thread_rng();
         let mut bytes = vec![0u8; len];

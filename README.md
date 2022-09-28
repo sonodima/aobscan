@@ -1,14 +1,14 @@
 <h1 align="center">AOBscan 📝</h1>
 
-> AOBscan is a library for multi-threaded AOB memory scanning.
+> AOBscan is a library for multi-threaded AOB memory scanning
 
-## Features:
+## Features
 
 - Single-threaded and multi-threaded scanning
 - IDA-style & code-style pattern syntax
 - Match selection using callback functions
 
-## Usage:
+## Usage
 
 ```rust
 fn main() {
@@ -24,6 +24,10 @@ fn main() {
 }
 ```
 
-## Performance:
+## Benchmark
 
-I have recorded performance up to 8GB/s on a 10 core Apple M1 Pro.
+The results of the `benchmark` example are as follows:
+
+| CPU                | MT        | ST         |
+|--------------------|-----------|------------|
+| Apple M1 Pro (10C) | 6.47 GB/s | 0.536 GB/s |

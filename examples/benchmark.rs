@@ -23,7 +23,7 @@ fn run_single_threaded() -> std::time::Duration {
             .unwrap()
             .with_threads(1)
             .unwrap()
-            .scan(&data, move |offset| {
+            .scan(&data, move |_| {
                 true // Return true to continue scanning for other matches
             });
 
@@ -45,7 +45,7 @@ fn run_multi_threaded() -> std::time::Duration {
             .ida_style("48 8B ? ? ? ? ?")
             .unwrap()
             .with_all_threads()
-            .scan(&data, move |offset| {
+            .scan(&data, move |_| {
                 true // Return true to continue scanning for other matches
             });
 
@@ -56,14 +56,26 @@ fn run_multi_threaded() -> std::time::Duration {
     total_time
 }
 
+fn get_gbps(time: std::time::Duration, bytes: usize) -> f64 {
+    let bytes_per_second = bytes as f64 / time.as_secs_f64();
+    let gbps = bytes_per_second / 1024.0 / 1024.0 / 1024.0;
+    gbps
+}
+
 fn main() {
     println!("Blocks: {} x {:#02x} bytes", BLOCKS, BLOCK_SIZE);
 
     let mut time = run_multi_threaded();
-    let mut gbs = (BLOCK_SIZE * BLOCKS) as f64 / time.as_secs_f64() / 1024.0 / 1024.0 / 1024.0;
-    println!("Multi-threaded: {:?} @ {:.2} GB/s", time, gbs);
+    println!(
+        "Multi-threaded: {:?} @ {:.2} GB/s",
+        time,
+        get_gbps(time, BLOCK_SIZE * BLOCKS)
+    );
 
     time = run_single_threaded();
-    let mut gbs = (BLOCK_SIZE * BLOCKS) as f64 / time.as_secs_f64() / 1024.0 / 1024.0 / 1024.0;
-    println!("Single-threaded: {:?} @ {:.2} GB/s", time, gbs);
+    println!(
+        "Single-threaded: {:?} @ {:.2} GB/s",
+        time,
+        get_gbps(time, BLOCK_SIZE * BLOCKS)
+    );
 }

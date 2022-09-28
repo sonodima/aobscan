@@ -1,9 +1,18 @@
 [package]
 name = "aobscan"
 version = "0.1.0"
-edition = "2021"
 authors = ["sonodima"]
-description = "AOBscan is a library for multi-threaded AOB memory scanning."
+edition = "2021"
+
+description = "AOBscan is a library for multi-threaded AOB memory scanning"
+readme = "README.md"
+homepage = "https://github.com/sonodima/aobscan"
+repository = "https://github.com/sonodima/aobscan"
+license = "MIT"
+
+keywords = ["memory", "aob", "signature", "pattern", "scan"]
+categories = ["algorithms"]
+
 
 [dependencies]
 num_cpus = "1.13"
