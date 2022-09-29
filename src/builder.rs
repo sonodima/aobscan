@@ -1,5 +1,52 @@
 use super::Pattern;
 
+/// An error in the pattern builder.<br>
+/// This encapsulates all possible errors that can occur when building a pattern.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuilderError {
+    /// Thrown when the signature's byte parsing fails.
+    ParseError(std::num::ParseIntError),
+    /// Thrown when the size of the signature differs from the size of the mask.
+    SizeMismatch,
+    /// Thrown when the signature is empty.
+    InvalidSignature,
+    /// Thrown when the selected worker threads count is invalid.
+    InvalidThreadCount,
+}
+
+impl std::fmt::Display for BuilderError {
+    /// Formats the various errors that can occur when building a pattern.<br><br>
+    ///
+    /// # Arguments
+    /// * `f` - The formatter.
+    ///
+    /// # Returns
+    /// Whether the formatting was successful or not.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ParseError(err) => write!(f, "{}", err),
+            Self::SizeMismatch => write!(f, "the size of signature and mask do not match"),
+            Self::InvalidSignature => write!(f, "the signature is not formatted correctly"),
+            Self::InvalidThreadCount => write!(f, "the thread count must be greater than zero and less than or equal to the number of logical cores"),
+        }
+    }
+}
+
+impl std::error::Error for BuilderError {}
+
+impl From<std::num::ParseIntError> for BuilderError {
+    /// Converts a `ParseIntError` into a `BuilderError`.<br><br>
+    ///
+    /// # Arguments
+    /// * `err` - The error to convert.
+    ///
+    /// # Returns
+    /// The converted error.
+    fn from(err: std::num::ParseIntError) -> Self {
+        Self::ParseError(err)
+    }
+}
+
 /// Builder for the Pattern struct.<br>
 /// The builder is used to create a Pattern struct with the desired settings.<br><br>
 ///
@@ -78,16 +125,16 @@ impl PatternBuilder {
     /// signature:  `b"\x48\x8B\x05\x00\x00\x00\x00"`
     /// mask:       `"...????"`
     /// ```
-    pub fn code_style(mut self, signature: &[u8], mask: &str) -> Option<Self> {
+    pub fn code_style(mut self, signature: &[u8], mask: &str) -> Result<Self, BuilderError> {
         let signature_vec: Vec<u8> = signature.to_vec();
         let mask_vec: Vec<bool> = mask.chars().map(|c| c != '?').collect();
 
         if signature_vec.len() != mask_vec.len() {
-            None
+            Err(BuilderError::SizeMismatch)
         } else {
             self.signature = signature_vec;
             self.mask = mask_vec;
-            Some(self)
+            Ok(self)
         }
     }
 
@@ -110,34 +157,33 @@ impl PatternBuilder {
     /// ```ignore
     /// pattern:    "48 8B 05 ? ? ? ?"
     /// ```
-    pub fn ida_style(mut self, pattern: &str) -> Option<Self> {
+    pub fn ida_style(mut self, pattern: &str) -> Result<Self, BuilderError> {
         if pattern.is_empty() {
-            return None;
+            return Err(BuilderError::InvalidSignature);
         }
 
         let mut signature_bytes: Vec<u8> = vec![];
         let mut mask_bytes: Vec<bool> = vec![];
 
-        pattern.split_whitespace().for_each(|pair| {
+        for pair in pattern.split_whitespace() {
             if pair == "?" {
                 mask_bytes.push(false);
                 signature_bytes.push(0);
             } else {
                 mask_bytes.push(true);
-                // todo: handle invalid hex values, maybe return a Result instead of an Option?
                 signature_bytes.push(
-                    u8::from_str_radix(pair, 16).unwrap()
+                    u8::from_str_radix(pair, 16)?
                 );
             }
-        });
+        }
 
         if signature_bytes.is_empty() {
-            return None;
+            return Err(BuilderError::InvalidSignature);
         }
 
         self.mask = mask_bytes;
         self.signature = signature_bytes;
-        Some(self)
+        Ok(self)
     }
 
     /// Sets the number of threads to use for scanning.<br>
@@ -149,12 +195,12 @@ impl PatternBuilder {
     ///
     /// # Returns
     /// The current instance of the builder if the number of threads is valid, otherwise `None`.
-    pub fn with_threads(mut self, threads: usize) -> Option<Self> {
+    pub fn with_threads(mut self, threads: usize) -> Result<Self, BuilderError> {
         if threads == 0 || threads > num_cpus::get() {
-            None
+            Err(BuilderError::InvalidThreadCount)
         } else {
             self.threads = threads;
-            Some(self)
+            Ok(self)
         }
     }
 
@@ -162,7 +208,7 @@ impl PatternBuilder {
     ///
     /// # Returns
     /// The current instance of the builder.
-    pub fn with_all_threads<'a>(mut self) -> Self {
+    pub fn with_all_threads(mut self) -> Self {
         self.threads = num_cpus::get();
         self
     }
