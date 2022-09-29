@@ -160,73 +160,90 @@ impl Pattern {
         data: &[u8],
         callback: impl FnMut(usize) -> bool + Send + Sync,
     ) -> bool {
-        // Count the number of running threads, so we can wait for them to finish.
-        let running_threads = Arc::new(AtomicUsize::new(0));
         // Atomic flag to stop all threads if a match is found and accepted.
         let finished = Arc::new(AtomicBool::new(false));
-        // Atomic flag to check if any threads found a match.
-        let found = Arc::new(AtomicBool::new(false));
         // Mutex for the callback function.
         let callback_arc = Arc::new(Mutex::new(callback));
 
-        // Using a thread scope allows us to pass non 'static references to the threads.
-        std::thread::scope(|scope| {
-            // Iterate over the number of threads to spawn.
-            for tc in 0..self.threads {
-                // Split the data into an overlapped chunks.
-                // Each thread will scan a chunk of the data.
-                let range = Self::get_chunk_range(
-                    data.len(),
-                    // Create a chunk for each thread.
-                    self.threads,
-                    // Overlap the chunks by the length of the signature - 1, to avoid missing
-                    // matches that are split between chunks.
-                    self.signature.len() - 1,
-                    tc,
-                );
+        if self.threads > 1 {
+            // If the scan is multi-threaded, split the data into chunks and
+            // scan each chunk in parallel.
 
-                // Copy the signature and mask to the thread.
-                let signature = self.signature.clone();
-                let mask = self.mask.clone();
+            // Count the number of running threads, so we can wait for them to finish.
+            let running_threads = Arc::new(AtomicUsize::new(0));
+            // Atomic flag to check if any threads found a match.
+            let found = Arc::new(AtomicBool::new(false));
 
-                // Clone the atomic flags and callback function.
-                let running_threads = running_threads.clone();
-                let finished = finished.clone();
-                let found = found.clone();
-                let callback = callback_arc.clone();
+            // Using a thread scope allows us to pass non 'static references to the threads.
+            std::thread::scope(|scope| {
+                // Iterate over the number of threads to spawn.
+                for tc in 0..self.threads {
+                    // Split the data into an overlapped chunks.
+                    // Each thread will scan a chunk of the data.
+                    let range = Self::get_chunk_range(
+                        data.len(),
+                        // Create a chunk for each thread.
+                        self.threads,
+                        // Overlap the chunks by the length of the signature - 1, to avoid missing
+                        // matches that are split between chunks.
+                        self.signature.len() - 1,
+                        tc,
+                    );
 
-                // Spawn a new worker thread and increment the atomic running thread count.
-                running_threads.fetch_add(1, Ordering::SeqCst);
-                scope.spawn(move || {
-                    // Resize the slice to the chunk region.
-                    let data = &data[range.0..range.1];
+                    // Copy the signature and mask to the thread.
+                    let signature = self.signature.clone();
+                    let mask = self.mask.clone();
 
-                    // Scan the chunk of data.
-                    if Self::scan_chunk(
-                        data,
-                        &signature,
-                        &mask,
-                        range.0,
-                        &finished,
-                        callback,
-                    ) {
-                        // If a match was found, set the found flag to true.
-                        found.store(true, Ordering::SeqCst);
-                    }
+                    // Clone the atomic flags and callback function.
+                    let running_threads = running_threads.clone();
+                    let finished = finished.clone();
+                    let found = found.clone();
+                    let callback = callback_arc.clone();
 
-                    // Thread has finished, decrement the atomic running thread count.
-                    running_threads.fetch_sub(1, Ordering::SeqCst);
-                });
+                    // Spawn a new worker thread and increment the atomic running thread count.
+                    running_threads.fetch_add(1, Ordering::SeqCst);
+                    scope.spawn(move || {
+                        // Resize the slice to the chunk region.
+                        let data = &data[range.0..range.1];
+
+                        // Scan the chunk of data.
+                        if Self::scan_chunk(
+                            data,
+                            &signature,
+                            &mask,
+                            range.0,
+                            &finished,
+                            callback,
+                        ) {
+                            // If a match was found, set the found flag to true.
+                            found.store(true, Ordering::SeqCst);
+                        }
+
+                        // Thread has finished, decrement the atomic running thread count.
+                        running_threads.fetch_sub(1, Ordering::SeqCst);
+                    });
+                }
+            });
+
+            // Spin wait until all threads have finished.
+            while running_threads.load(Ordering::SeqCst) != 0 {
+                std::thread::sleep(Duration::from_millis(1));
             }
-        });
 
-        // Spin wait until all threads have finished.
-        while running_threads.load(Ordering::SeqCst) != 0 {
-            std::thread::sleep(Duration::from_millis(1));
+            // Return true if at least one match was found.
+            found.load(Ordering::SeqCst)
+        } else {
+            // If the scan is single-threaded, avoid the threading clutter and
+            // simply scan the data in the current thread.
+            Self::scan_chunk(
+                data,
+                &self.signature,
+                &self.mask,
+                0,
+                &finished,
+                callback_arc
+            )
         }
-
-        // Return true if at least one match was found.
-        found.load(Ordering::SeqCst)
     }
 }
 
