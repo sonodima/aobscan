@@ -155,7 +155,7 @@ impl Pattern {
     ///
     /// # Returns
     /// True if at least one match was found, otherwise false.
-    pub fn scan<'a>(
+    pub fn scan(
         &self,
         data: &[u8],
         callback: impl FnMut(usize) -> bool + Send + Sync,
@@ -239,7 +239,7 @@ impl Display for Pattern {
     /// # Returns
     /// Whether the formatting was successful or not.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[ ")?;
+        write!(f, "[")?;
         for (i, byte) in self.signature.iter().enumerate() {
             if self.mask[i] {
                 write!(f, "{:02X} ", byte)?;
@@ -247,6 +247,6 @@ impl Display for Pattern {
                 write!(f, "? ")?;
             }
         }
-        write!(f, "]")
+        write!(f, " ][{}]", self.threads)
     }
 }
