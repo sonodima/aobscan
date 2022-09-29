@@ -25,6 +25,7 @@ fn main() {
         .ida_style("48 8B ? ? ? ?")
         .unwrap()
         .with_all_threads()
+        .build()
         .scan(data, |offset| {
             println!("Found pattern at offset: 0x{:x}", offset);
             false
@@ -38,4 +39,4 @@ The results of the `benchmark` example are as follows:
 
 | CPU                | MT        | ST        |
 |--------------------|-----------|-----------|
-| Apple M1 Pro (10C) | 5.77 GB/s | 0.82 GB/s |
+| Apple M1 Pro (10C) | 6.21 GB/s | 0.82 GB/s |
