@@ -18,11 +18,12 @@ fn run_single_threaded() -> std::time::Duration {
         let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
         let start = std::time::Instant::now();
 
-        aobscan::Pattern::new()
+        aobscan::PatternBuilder::new()
             .ida_style("48 8B ? ? ? ? ?")
             .unwrap()
             .with_threads(1)
             .unwrap()
+            .build()
             .scan(&data, move |_| {
                 true // Return true to continue scanning for other matches
             });
@@ -41,10 +42,11 @@ fn run_multi_threaded() -> std::time::Duration {
         let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
         let start = std::time::Instant::now();
 
-        aobscan::Pattern::new()
+        aobscan::PatternBuilder::new()
             .ida_style("48 8B ? ? ? ? ?")
             .unwrap()
             .with_all_threads()
+            .build()
             .scan(&data, move |_| {
                 true // Return true to continue scanning for other matches
             });
