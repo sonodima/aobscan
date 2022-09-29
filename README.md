@@ -18,6 +18,16 @@
 
 ## Usage
 
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+aobscan = "0.1"
+```
+
+> <b>Example:</b> Scan for <kbd>48 8B ? ? ?</kbd> in `some.bin` with all the available threads, and stop at the first
+> match.
+
 ```rust
 fn main() {
     let data = include_bytes!("some_file.bin");
