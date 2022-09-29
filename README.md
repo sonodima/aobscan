@@ -3,6 +3,8 @@
 <div align="center">
   <a href="https://crates.io/crates/aobscan"><img src="https://img.shields.io/crates/v/aobscan.svg"/></a>
   <a href="https://docs.rs/aobscan"><img src="https://docs.rs/aobscan/badge.svg"/></a>
+  <a href="https://github.com/sonodima/aobscan/actions?workflow=CI"><img src="https://github.com/sonodima/aobscan/workflows/CI/badge.svg"/></a>
+
   <img src="https://img.shields.io/badge/license-MIT-blue.svg"/>
 </div>
 
