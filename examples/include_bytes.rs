@@ -2,8 +2,7 @@ fn main() {
     let data = include_bytes!("../test.bin");
     let start = std::time::Instant::now();
 
-    let scan = aobscan::PatternBuilder::new()
-        .ida_style("48 8B ? ? ? ? ? 48 8B 88 ? ? ? ?")
+    let scan = aobscan::PatternBuilder::ƒrom_ida_style("48 8B ? ? ? ? ? 48 8B 88 ? ? ? ?")
         .unwrap()
         .with_threads(1)
         .unwrap()

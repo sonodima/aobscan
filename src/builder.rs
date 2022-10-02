@@ -8,7 +8,7 @@ pub enum BuilderError {
     ParseError(std::num::ParseIntError),
     /// Thrown when the size of the signature differs from the size of the mask.
     SizeMismatch,
-    /// Thrown when the signature is empty.
+    /// Thrown when the signature is empty or invalid.
     InvalidSignature(String),
     /// Thrown when the selected worker threads count is invalid.
     InvalidThreadCount,
@@ -55,8 +55,7 @@ impl From<std::num::ParseIntError> for BuilderError {
 /// ## Multi-threaded scan for an IDA-style pattern
 /// ```
 /// let data = std::fs::read("some.bin").unwrap();
-/// let found = aobscan::PatternBuilder::new()
-///     .ida_style("48 8B 05 ? ? ? ? 48 8B 88 ? ? ? ?")
+/// let found = aobscan::PatternBuilder::from_ida_style("48 8B 05 ? ? ? ? 48 8B 88 ? ? ? ?")
 ///     .unwrap()
 ///     .with_all_threads()
 ///     .build()
@@ -69,9 +68,10 @@ impl From<std::num::ParseIntError> for BuilderError {
 /// ## Single-threaded scan for a code-style pattern
 /// ```
 /// let data = std::fs::read("some.bin").unwrap();
-/// let found = aobscan::PatternBuilder::new()
-///     .code_style(b"\x48\x8B\x05\x00\x00\x00\x00\x48\x8B\x88\x00\x00\x00\x00", "...????...????")
-///     .unwrap()
+/// let found = aobscan::PatternBuilder::from_code_style(
+///     b"\x48\x8B\x05\x00\x00\x00\x00\x48\x8B\x88\x00\x00\x00\x00",
+///     "...????...????"
+/// ).unwrap()
 ///     .with_threads(1)
 ///     .unwrap()
 ///     .build()
@@ -88,16 +88,7 @@ pub struct PatternBuilder {
 }
 
 impl PatternBuilder {
-    /// Creates an empty pattern builder.
-    pub fn new() -> Self {
-        Self {
-            threads: 1,
-            signature: vec![],
-            mask: vec![],
-        }
-    }
-
-    /// Initializes the pattern with a code-style signature.<br><br>
+    /// Creates a pattern builder from a code-style signature.<br><br>
     ///
     /// A code-style signature is characterized by a byte array and a mask string.<br>
     /// The mask string is a list of characters, where each character represents whether
@@ -107,6 +98,9 @@ impl PatternBuilder {
     ///
     /// The length of the mask string must be equal to the length of the byte array,
     /// and the byte array can contain any hexadecimal value in the place of a wildcard.<br><br>
+    ///
+    /// This pattern representation is usually the most safe and reliable, but it is also
+    /// the most verbose and tedious to write.<br><br>
     ///
     /// # Arguments
     /// * `signature` - The byte array containing the bytes to search for.
@@ -120,25 +114,30 @@ impl PatternBuilder {
     /// * In the byte array, use `\x00` for each wildcard byte, and the actual byte
     /// value for each non-wildcard byte.
     ///
+    /// # Errors
+    /// * `BuilderError::SizeMismatch` - The size of the signature and mask do not match.
+    ///
     /// # Format
     /// ```ignore
     /// signature:  `b"\x48\x8B\x05\x00\x00\x00\x00"`
     /// mask:       `"...????"`
     /// ```
-    pub fn code_style(mut self, signature: &[u8], mask: &str) -> Result<Self, BuilderError> {
-        let signature_vec: Vec<u8> = signature.to_vec();
-        let mask_vec: Vec<bool> = mask.chars().map(|c| c != '?').collect();
+    pub fn from_code_style(signature: &[u8], mask: &str) -> Result<Self, BuilderError> {
+        let signature_bytes: Vec<u8> = signature.to_vec();
+        let mask_bytes: Vec<bool> = mask.chars().map(|c| c != '?').collect();
 
-        if signature_vec.len() != mask_vec.len() {
+        if signature_bytes.len() != mask_bytes.len() {
             Err(BuilderError::SizeMismatch)
         } else {
-            self.signature = signature_vec;
-            self.mask = mask_vec;
-            Ok(self)
+            Ok(Self {
+                signature: signature_bytes,
+                mask: mask_bytes,
+                threads: 1,
+            })
         }
     }
 
-    /// Initializes the pattern with an IDA-style signature.<br><br>
+    /// Creates a pattern builder from an IDA-style signature.<br><br>
     ///
     /// An IDA-style signature is characterized by a single string of hexadecimal
     /// values separated by spaces.<br>
@@ -153,11 +152,15 @@ impl PatternBuilder {
     /// # Returns
     /// The current instance of the builder, or `None` if the parameters are invalid.<br><br>
     ///
+    /// # Errors
+    /// * `BuilderError::InvalidSignature` - The pattern string is empty.
+    /// * `BuilderError::ParseError` - The pattern string contains invalid hexadecimal values.
+    ///
     /// # Format
     /// ```ignore
     /// pattern:    "48 8B 05 ? ? ? ?" // or "48 8B 05 ?? ?? ?? ??"
     /// ```
-    pub fn ida_style(mut self, pattern: &str) -> Result<Self, BuilderError> {
+    pub fn from_ida_style(pattern: &str) -> Result<Self, BuilderError> {
         if pattern.is_empty() {
             Err(BuilderError::InvalidSignature(
                 "the pattern cannot be empty".to_string()
@@ -179,12 +182,14 @@ impl PatternBuilder {
             }
         }
 
-        self.mask = mask_bytes;
-        self.signature = signature_bytes;
-        Ok(self)
+        Ok(Self {
+            signature: signature_bytes,
+            mask: mask_bytes,
+            threads: 1,
+        })
     }
 
-    /// Initializes the pattern from a string of non-spaced, case-insensitive hex bytes.<br><br>
+    /// Creates a pattern builder from a string of non-spaced, case-insensitive hex bytes.<br><br>
     ///
     /// The string must contain only hexadecimal characters (or '??'s for wildcard bytes),
     /// and its length must be a multiple of 2.<br>
@@ -196,11 +201,15 @@ impl PatternBuilder {
     /// # Returns
     /// The current instance of the builder, or `None` if the parameter is invalid.<br><br>
     ///
+    /// # Errors
+    /// * `BuilderError::InvalidSignature` - The pattern is empty, its length is odd, contains invalid characters or single-char wildcards.
+    /// * `BuilderError::ParseError` - The pattern contains invalid hexadecimal characters.
+    ///
     /// # Format
     /// ```ignore
     /// pattern:    "488b05????????488b88??" // a pair of '??'s represents a wildcard byte
     /// ```
-    pub fn from_hex(mut self, pattern: &str) -> Result<Self, BuilderError> {
+    pub fn from_hex_string(pattern: &str) -> Result<Self, BuilderError> {
         if pattern.is_empty() {
             Err(BuilderError::InvalidSignature(
                 "the pattern cannot be empty".to_string()
@@ -242,11 +251,12 @@ impl PatternBuilder {
             }
         }
 
-        self.mask = mask_bytes;
-        self.signature = signature_bytes;
-        Ok(self)
+        Ok(Self {
+            signature: signature_bytes,
+            mask: mask_bytes,
+            threads: 1,
+        })
     }
-
 
     /// Sets the number of threads to use for scanning.<br>
     /// The number of threads is considered invalid if it is set to `0` or greater than

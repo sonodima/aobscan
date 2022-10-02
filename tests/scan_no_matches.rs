@@ -7,8 +7,7 @@ fn scan_no_matches() {
     // Match all the bytes.
     // This data does not exist in the data buffer, so no matches should be found.
     let mut called = false;
-    let result = aobscan::PatternBuilder::new()
-        .ida_style("55 48 89 E5 ? 8C")
+    let result = aobscan::PatternBuilder::from_ida_style("55 48 89 E5 ? 8C")
         .unwrap()
         .with_all_threads()
         .build()

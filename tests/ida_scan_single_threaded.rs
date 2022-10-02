@@ -25,8 +25,7 @@ fn ida_scan_single_threaded() {
     // Match all the bytes.
     // This is not really a pattern, but it is a good test case.
     let mut correct = false;
-    let result = aobscan::PatternBuilder::new()
-        .ida_style("55 48 89 E5 48 8B")
+    let result = aobscan::PatternBuilder::from_ida_style("55 48 89 E5 48 8B")
         .unwrap()
         .with_all_threads()
         .build()

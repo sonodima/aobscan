@@ -25,8 +25,7 @@ fn scan_multi_threaded() {
 
     // Run the IDA-style AOB scan.
     let mut correct = false;
-    let mut result = aobscan::PatternBuilder::new()
-        .ida_style("55 48 89 E5 ? 8B ? ? 00 ? ? 8B ? ? 5D C3")
+    let mut result = aobscan::PatternBuilder::from_ida_style("55 48 89 E5 ? 8B ? ? 00 ? ? 8B ? ? 5D C3")
         .unwrap()
         .with_all_threads()
         .build()
@@ -40,12 +39,10 @@ fn scan_multi_threaded() {
 
     // Run the code-style AOB scan.
     correct = false;
-    result = aobscan::PatternBuilder::new()
-        .code_style(
-            b"\x55\x48\x89\xE5\x00\x8B\x00\x00\x00\x00\x00\x8B\x00\x00\x5D\xC3",
-            "....?.??.??.??..",
-        )
-        .unwrap()
+    result = aobscan::PatternBuilder::from_code_style(
+        b"\x55\x48\x89\xE5\x00\x8B\x00\x00\x00\x00\x00\x8B\x00\x00\x5D\xC3",
+        "....?.??.??.??..",
+    ).unwrap()
         .with_all_threads()
         .build()
         .scan(&random_bytes, |offset| {

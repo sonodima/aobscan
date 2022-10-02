@@ -18,8 +18,7 @@ fn run_single_threaded() -> std::time::Duration {
         let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
         let start = std::time::Instant::now();
 
-        aobscan::PatternBuilder::new()
-            .ida_style("48 8B ? ? ? ? ?")
+        aobscan::PatternBuilder::from_ida_style("48 8B ? ? ? ? ?")
             .unwrap()
             .with_threads(1)
             .unwrap()
@@ -42,8 +41,7 @@ fn run_multi_threaded() -> std::time::Duration {
         let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
         let start = std::time::Instant::now();
 
-        aobscan::PatternBuilder::new()
-            .ida_style("48 8B ? ? ? ? ?")
+        aobscan::PatternBuilder::from_ida_style("48 8B ? ? ? ? ?")
             .unwrap()
             .with_all_threads()
             .build()
