@@ -27,7 +27,8 @@ fn ida_scan_single_threaded() {
     let mut correct = false;
     let result = aobscan::PatternBuilder::from_ida_style("55 48 89 E5 48 8B")
         .unwrap()
-        .with_all_threads()
+        .with_threads(1)
+        .unwrap()
         .build()
         .scan(&random_bytes, |offset| {
             if offset as isize == target_offset { correct = true; }
