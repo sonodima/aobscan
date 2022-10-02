@@ -221,7 +221,7 @@ impl PatternBuilder {
             if pair == b"??" {
                 mask_bytes.push(false);
                 signature_bytes.push(0);
-            } else if pair.contains(&('?' as u8)) {
+            } else if pair.contains(&b'?') {
                 // If the pair contains a single '?', it is invalid
                 // At the moment, the library doesn't support single '?' wildcards
                 Err(BuilderError::InvalidSignature(

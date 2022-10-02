@@ -119,4 +119,11 @@ fn hex_pattern() {
             .from_hex(" ")
             .is_err()
     );
+
+    assert!(
+        // Invalid hex pattern (single-char wildcard)
+        aobscan::PatternBuilder::new()
+            .from_hex("?")
+            .is_err()
+    );
 }
