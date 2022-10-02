@@ -17,8 +17,10 @@
 ## Features
 
 - Single-threaded and multi-threaded scanning
-- IDA-style & code-style pattern syntax
 - Match selection using callback functions
+- IDA-style patterns: `48 8b ? ? ? 48 8c ?? ?? ?? ??`
+- Code-style signatures/masks: (`48 8b 00 00 00`, `..???`)
+- Hexadecimal strings: `488b??????`
 
 ## Usage
 
@@ -35,8 +37,7 @@ aobscan = "0.1"
 ```rust
 fn main() {
     let data = include_bytes!("some_file.bin");
-    let result = aobscan::Pattern::new()
-        .ida_style("48 8B ? ? ? ?")
+    let result = aobscan::Pattern::from_ida_style("48 8B ? ? ? ?")
         .unwrap()
         .with_all_threads()
         .build()
