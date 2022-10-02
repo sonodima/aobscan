@@ -142,7 +142,7 @@ impl PatternBuilder {
     ///
     /// An IDA-style signature is characterized by a single string of hexadecimal
     /// values separated by spaces.<br>
-    /// In this string, you can use `?` to represent a wildcard byte.<br><br>
+    /// In this string, you can use `?` or `??` to represent a wildcard byte.<br><br>
     ///
     /// It is generally preferred as it is shorter and easier to read, but it may
     /// introduce some overhead as it is ultimately converted to a code-style like AOB.<br><br>
@@ -155,7 +155,7 @@ impl PatternBuilder {
     ///
     /// # Format
     /// ```ignore
-    /// pattern:    "48 8B 05 ? ? ? ?"
+    /// pattern:    "48 8B 05 ? ? ? ?" // or "48 8B 05 ?? ?? ?? ??"
     /// ```
     pub fn ida_style(mut self, pattern: &str) -> Result<Self, BuilderError> {
         if pattern.is_empty() {
@@ -166,7 +166,7 @@ impl PatternBuilder {
         let mut mask_bytes: Vec<bool> = vec![];
 
         for pair in pattern.split_whitespace() {
-            if pair == "?" {
+            if pair == "?" || pair == "??" {
                 mask_bytes.push(false);
                 signature_bytes.push(0);
             } else {
@@ -185,7 +185,7 @@ impl PatternBuilder {
         self.signature = signature_bytes;
         Ok(self)
     }
-
+   
     /// Sets the number of threads to use for scanning.<br>
     /// The number of threads is considered invalid if it is set to `0` or greater than
     /// the number of logical CPU cores.<br><br>
