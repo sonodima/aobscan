@@ -216,7 +216,7 @@ impl PatternBuilder {
             ))?
         }
 
-        // A hex string must have an even number of characters
+        // A hex string must have an even number of characters.
         if pattern.len() % 2 != 0 {
             Err(BuilderError::InvalidSignature(
                 "the pattern must have an even number of characters".to_string()
@@ -231,8 +231,8 @@ impl PatternBuilder {
                 mask_bytes.push(false);
                 signature_bytes.push(0);
             } else if pair.contains(&b'?') {
-                // If the pair contains a single '?', it is invalid
-                // At the moment, the library doesn't support single '?' wildcards
+                // If the pair contains a single '?', it is invalid.
+                // At the moment, the library doesn't support single '?' wildcards.
                 Err(BuilderError::InvalidSignature(
                     "the pattern does not accept single '?' wildcards".to_string()
                 ))?

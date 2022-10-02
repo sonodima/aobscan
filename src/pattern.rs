@@ -1,9 +1,43 @@
-use std::fmt::{Display, Formatter};
 use std::ops::DerefMut;
 use std::sync::{
     Arc, atomic::{AtomicBool, AtomicUsize, Ordering}, Mutex,
 };
 use std::time::Duration;
+
+use object::{Object, ObjectSection};
+
+/// An error in the object pattern scanner.<br>
+/// This encapsulates all possible errors that can occur when scanning for
+/// a pattern in an object file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObjectError {
+    /// Thrown when the content of the data to scan is not a valid object file.
+    InvalidObject,
+    /// Thrown when the the specified binary section to scan for the pattern is not found.
+    SectionNotFound,
+    /// Thrown when the data of the specified binary section is not available.
+    SectionDataNotFound,
+}
+
+impl std::fmt::Display for ObjectError {
+    /// Formats the various errors that can occur when scanning for a pattern
+    /// in an object file.<br><br>
+    ///
+    /// # Arguments
+    /// * `f` - The formatter.
+    ///
+    /// # Returns
+    /// Whether the formatting was successful or not.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidObject => write!(f, "the content of the data to scan is not a valid object file"),
+            Self::SectionNotFound => write!(f, "the specified binary section is not found"),
+            Self::SectionDataNotFound => write!(f, "the data of the specified binary section is not available"),
+        }
+    }
+}
+
+impl std::error::Error for ObjectError {}
 
 /// A pattern that can be used to scan for matches in a byte array.<br><br>
 ///
@@ -245,9 +279,52 @@ impl Pattern {
             )
         }
     }
+
+    /// Performs the AOB scan in the specified object section of the given slice.<br><br>
+    ///
+    /// This function is useful for restricting the scan to a specific section of
+    /// a binary file, such as the `__text` section.<br>
+    /// This reduces the amount of data that needs to be scanned, and can
+    /// drastically improve the scan speed.<br><br>
+    ///
+    /// If the section is not found, the scan is not performed, and `false` is returned.<br><br>
+    ///
+    /// The implementation of the scan algorithm is the same as the one of
+    /// the `scan` function.<br><br>
+    ///
+    /// # Arguments
+    /// * `data` - The data slice to scan.
+    /// * `section_name` - The name of the section to scan. (e.g. `__text`)
+    /// * `callback` - The callback to execute when a match is found.
+    ///    - The callback receives the offset of the match as an argument.
+    ///    - It should return `true` to continue scanning, or `false` to stop.
+    ///
+    /// # Returns
+    /// True if at least one match was found, otherwise false.
+    pub fn scan_object(
+        &self,
+        data: &[u8],
+        section_name: &str,
+        callback: impl FnMut(usize) -> bool + Send + Sync,
+    ) -> Result<bool, ObjectError> {
+        if let Ok(file) = object::File::parse(data) {
+            if let Some(section) = file.section_by_name(section_name) {
+                if let Ok(data) = section.data() {
+                    // Run the normal scan on the section data.
+                    Ok(self.scan(data, callback))
+                } else {
+                    Err(ObjectError::SectionDataNotFound)
+                }
+            } else {
+                Err(ObjectError::SectionNotFound)
+            }
+        } else {
+            Err(ObjectError::InvalidObject)
+        }
+    }
 }
 
-impl Display for Pattern {
+impl std::fmt::Display for Pattern {
     /// Formats the pattern as a string of hexadecimal bytes (or '?') separated by spaces.<br><br>
     ///
     /// # Arguments
@@ -255,7 +332,7 @@ impl Display for Pattern {
     ///
     /// # Returns
     /// Whether the formatting was successful or not.
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[ ")?;
         for (i, byte) in self.signature.iter().enumerate() {
             if self.mask[i] {
