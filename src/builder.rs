@@ -179,12 +179,6 @@ impl PatternBuilder {
             }
         }
 
-        if signature_bytes.is_empty() {
-            Err(BuilderError::InvalidSignature(
-                "this signature does not contain any static byte".to_string()
-            ))?
-        }
-
         self.mask = mask_bytes;
         self.signature = signature_bytes;
         Ok(self)
@@ -246,12 +240,6 @@ impl PatternBuilder {
                     ))?
                 }
             }
-        }
-
-        if signature_bytes.is_empty() {
-            Err(BuilderError::InvalidSignature(
-                "this signature does not contain any static byte".to_string()
-            ))?
         }
 
         self.mask = mask_bytes;
