@@ -19,7 +19,7 @@
 - Single-threaded and multi-threaded scanning
 - Match selection using callback functions
 - IDA-style patterns: `48 8b ? ? ? 48 8c ?? ?? ?? ??`
-- Code-style signatures/masks: (`48 8b 00 00 00`, `..???`)
+- Code-style signatures/masks: (`\x48\x8b\x00\x00\x00`, `..???`)
 - Hexadecimal strings: `488b??????`
 
 ## Usage
