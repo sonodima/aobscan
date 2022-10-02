@@ -296,7 +296,7 @@ impl Pattern {
     /// * `data` - The data slice to scan.
     /// * `section_name` - The name of the section to scan. (e.g. `__text`)
     /// * `callback` - The callback to execute when a match is found.
-    ///    - The callback receives the offset of the match as an argument.
+    ///    - The callback receives the data_offset and section_offset of the match as arguments.
     ///    - It should return `true` to continue scanning, or `false` to stop.
     ///
     /// # Returns
@@ -305,13 +305,16 @@ impl Pattern {
         &self,
         data: &[u8],
         section_name: &str,
-        callback: impl FnMut(usize) -> bool + Send + Sync,
+        mut callback: impl FnMut(usize, usize) -> bool + Send + Sync,
     ) -> Result<bool, ObjectError> {
         if let Ok(file) = object::File::parse(data) {
             if let Some(section) = file.section_by_name(section_name) {
                 if let Ok(data) = section.data() {
                     // Run the normal scan on the section data.
-                    Ok(self.scan(data, callback))
+                    Ok(self.scan(data, move |offset| {
+                        // Call the callback with the data offset and section offset.
+                        callback(offset + section.address() as usize, offset)
+                    }))
                 } else {
                     Err(ObjectError::SectionDataNotFound)
                 }
