@@ -9,7 +9,7 @@ pub enum BuilderError {
     /// Thrown when the size of the signature differs from the size of the mask.
     SizeMismatch,
     /// Thrown when the signature is empty.
-    InvalidSignature,
+    InvalidSignature(String),
     /// Thrown when the selected worker threads count is invalid.
     InvalidThreadCount,
 }
@@ -26,7 +26,7 @@ impl std::fmt::Display for BuilderError {
         match self {
             Self::ParseError(err) => write!(f, "{}", err),
             Self::SizeMismatch => write!(f, "the size of signature and mask do not match"),
-            Self::InvalidSignature => write!(f, "the signature is not formatted correctly"),
+            Self::InvalidSignature(message) => write!(f, "{}", message),
             Self::InvalidThreadCount => write!(f, "the thread count must be greater than zero and less than or equal to the number of logical cores"),
         }
     }
@@ -159,7 +159,9 @@ impl PatternBuilder {
     /// ```
     pub fn ida_style(mut self, pattern: &str) -> Result<Self, BuilderError> {
         if pattern.is_empty() {
-            return Err(BuilderError::InvalidSignature);
+            Err(BuilderError::InvalidSignature(
+                "the pattern cannot be empty".to_string()
+            ))?
         }
 
         let mut signature_bytes: Vec<u8> = vec![];
@@ -178,14 +180,86 @@ impl PatternBuilder {
         }
 
         if signature_bytes.is_empty() {
-            return Err(BuilderError::InvalidSignature);
+            Err(BuilderError::InvalidSignature(
+                "this signature does not contain any static byte".to_string()
+            ))?
         }
 
         self.mask = mask_bytes;
         self.signature = signature_bytes;
         Ok(self)
     }
-   
+
+    /// Initializes the pattern from a string of non-spaced, case-insensitive hex bytes.<br><br>
+    ///
+    /// The string must contain only hexadecimal characters (or '??'s for wildcard bytes),
+    /// and its length must be a multiple of 2.<br>
+    /// Single-char wildcards are not supported!<br><br>
+    ///
+    /// # Arguments
+    /// * `pattern` - The pattern string.
+    ///
+    /// # Returns
+    /// The current instance of the builder, or `None` if the parameter is invalid.<br><br>
+    ///
+    /// # Format
+    /// ```ignore
+    /// pattern:    "488b05????????488b88??" // a pair of '??'s represents a wildcard byte
+    /// ```
+    pub fn from_hex(mut self, pattern: &str) -> Result<Self, BuilderError> {
+        if pattern.is_empty() {
+            Err(BuilderError::InvalidSignature(
+                "the pattern cannot be empty".to_string()
+            ))?
+        }
+
+        // A hex string must have an even number of characters
+        if pattern.len() % 2 != 0 {
+            Err(BuilderError::InvalidSignature(
+                "the pattern must have an even number of characters".to_string()
+            ))?
+        }
+
+        let mut signature_bytes: Vec<u8> = vec![];
+        let mut mask_bytes: Vec<bool> = vec![];
+
+        for pair in pattern.as_bytes().chunks(2) {
+            if pair == b"??" {
+                mask_bytes.push(false);
+                signature_bytes.push(0);
+            } else if pair.contains(&('?' as u8)) {
+                // If the pair contains a single '?', it is invalid
+                // At the moment, the library doesn't support single '?' wildcards
+                Err(BuilderError::InvalidSignature(
+                    "the pattern does not accept single '?' wildcards".to_string()
+                ))?
+            } else {
+                mask_bytes.push(true);
+                match std::str::from_utf8(pair) {
+                    Ok(pair) => {
+                        signature_bytes.push(
+                            u8::from_str_radix(pair, 16)?
+                        );
+                    }
+                    Err(_) => Err(BuilderError::InvalidSignature(
+                        "the pattern contains an invalid character".to_string()
+                    ))?
+                }
+            }
+        }
+
+        if signature_bytes.is_empty() {
+            Err(BuilderError::InvalidSignature(
+                "this signature does not contain any static byte".to_string()
+            ))?
+        }
+
+        self.mask = mask_bytes;
+        self.signature = signature_bytes;
+        Ok(self)
+    }
+
+
     /// Sets the number of threads to use for scanning.<br>
     /// The number of threads is considered invalid if it is set to `0` or greater than
     /// the number of logical CPU cores.<br><br>

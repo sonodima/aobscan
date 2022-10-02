@@ -241,7 +241,7 @@ impl Pattern {
                 &self.mask,
                 0,
                 &finished,
-                callback_arc
+                callback_arc,
             )
         }
     }
@@ -256,7 +256,7 @@ impl Display for Pattern {
     /// # Returns
     /// Whether the formatting was successful or not.
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
+        write!(f, "[ ")?;
         for (i, byte) in self.signature.iter().enumerate() {
             if self.mask[i] {
                 write!(f, "{:02X} ", byte)?;
@@ -264,6 +264,6 @@ impl Display for Pattern {
                 write!(f, "? ")?;
             }
         }
-        write!(f, " ][{}]", self.threads)
+        write!(f, "] [t={}]", self.threads)
     }
 }
