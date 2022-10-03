@@ -323,10 +323,15 @@ impl Pattern {
         let section_data = section.data()
             .or(Err(ObjectError::SectionDataNotFound))?;
 
+        // Get the raw file offset of the section.
+        let section_offset = section.file_range()
+            .ok_or(ObjectError::SectionDataNotFound)?.0 as usize;
+
         // Wrap the callback function to add another argument to it.
         // This allows us to pass both the section and file offset to the callback.
         Ok(self.scan(section_data, |offset| {
-            callback(section.address() as usize + offset, offset)
+            // section.file_range()
+            callback(section_offset + offset, offset)
         }))
     }
 }
