@@ -1,8 +1,16 @@
+/// This example demonstrates how to use the `scan_object` function to scan a
+/// specific section in an object file.
+///
+/// This example scans the `__text` section in a Mach-O macOS binary for four bytes,
+/// starting with 48, followed by three variable bytes, and ending with 48.
+///
+/// Threading: Single-threaded
+/// Hits: All
 fn main() {
-    let data = std::fs::read("/Applications/CrossOver.app/Contents/MacOS/CrossOver").unwrap();
+    let data = std::fs::read("macho_binary").unwrap();
     let section_name = "__text";
 
-    let scan = aobscan::PatternBuilder::from_ida_style("48 8B ? ? ? ? ?")
+    let scan = aobscan::PatternBuilder::from_ida_style("48 ? ? ? 48")
         .unwrap()
         .with_threads(1)
         .unwrap()

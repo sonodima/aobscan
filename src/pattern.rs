@@ -2,7 +2,6 @@ use std::ops::DerefMut;
 use std::sync::{
     Arc, atomic::{AtomicBool, AtomicUsize, Ordering}, Mutex,
 };
-use std::time::Duration;
 
 use object::{Object, ObjectSection};
 
@@ -261,7 +260,7 @@ impl Pattern {
 
             // Spin wait until all threads have finished.
             while running_threads.load(Ordering::SeqCst) != 0 {
-                std::thread::sleep(Duration::from_millis(1));
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
 
             // Return true if at least one match was found.
@@ -307,23 +306,28 @@ impl Pattern {
         section_name: &str,
         mut callback: impl FnMut(usize, usize) -> bool + Send + Sync,
     ) -> Result<bool, ObjectError> {
-        if let Ok(file) = object::File::parse(data) {
-            if let Some(section) = file.section_by_name(section_name) {
-                if let Ok(data) = section.data() {
-                    // Run the normal scan on the section data.
-                    Ok(self.scan(data, move |offset| {
-                        // Call the callback with the data offset and section offset.
-                        callback(offset + section.address() as usize, offset)
-                    }))
-                } else {
-                    Err(ObjectError::SectionDataNotFound)
-                }
-            } else {
-                Err(ObjectError::SectionNotFound)
-            }
-        } else {
-            Err(ObjectError::InvalidObject)
-        }
+        // Parse the object file from the data slice.
+        // This operation can fail if the data is not a valid object file.
+        let file = object::File::parse(data)
+            .or(Err(ObjectError::InvalidObject))?;
+
+        // Find the section with the specified name. (name is case-sensitive)
+        // Some binary files may contain multiple sections with the same name;
+        // in this case, the first section with the specified name is used.
+        let section = file.section_by_name(section_name)
+            .ok_or(ObjectError::SectionNotFound)?;
+
+        // Get the data slice of the section.
+        // This is the same as creating another slice from the data slice,
+        // using the section's offset and size.
+        let section_data = section.data()
+            .or(Err(ObjectError::SectionDataNotFound))?;
+
+        // Wrap the callback function to add another argument to it.
+        // This allows us to pass both the section and file offset to the callback.
+        Ok(self.scan(section_data, |offset| {
+            callback(section.address() as usize + offset, offset)
+        }))
     }
 }
 

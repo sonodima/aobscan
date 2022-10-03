@@ -1,8 +1,10 @@
+/// Pattern found callback.
 fn on_found(offset: usize) -> bool {
     println!("Found pattern at offset {:#02x}", offset);
     true // Return true to continue scanning for other matches
 }
 
+/// Runs all the batched scans in the given slice.
 fn scan_batch(batch: &Vec<aobscan::Pattern>, data: &[u8]) {
     for pattern in batch.iter() {
         println!("Scanning for pattern: {}", pattern);
@@ -10,6 +12,11 @@ fn scan_batch(batch: &Vec<aobscan::Pattern>, data: &[u8]) {
     }
 }
 
+/// This example demonstrates how to keep a vector of patterns, and then scan
+/// a buffer for all of them sequentially.
+///
+/// Threading: Multi-threaded
+/// Hits: All
 fn main() {
     let data = std::fs::read("test.bin").unwrap();
 

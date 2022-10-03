@@ -12,7 +12,10 @@
 
 <br>
 
-> AOBscan is a library for multi-threaded AOB memory scanning
+> AOBscan is a library for multi-threaded AOB memory scanning, aimed at malware analysis and reverse
+> engineering.<br><br>
+> This library implements helpful features for scanning for patterns in data slices or object files sections. (allowing
+> for extremely fast scans)
 
 ## Features
 
@@ -21,6 +24,7 @@
 - IDA-style patterns: `48 8b ? ? ? 48 8c ?? ?? ?? ??`
 - Code-style signatures/masks: (`\x48\x8b\x00\x00\x00`, `..???`)
 - Hexadecimal strings: `488b??????`
+- Scan for pattern in an object file section _(by name)_
 
 ## Usage
 
