@@ -34,7 +34,7 @@ fn run_single_threaded() -> std::time::Duration {
     let mut total_time = std::time::Duration::new(0, 0);
 
     for _ in 0..5 {
-        let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
+        let data = random_bytes(BLOCK_SIZE);
         let start = std::time::Instant::now();
 
         aobscan::PatternBuilder::from_ida_style("48 8B ? ? ? ? ?")
@@ -57,7 +57,7 @@ fn run_multi_threaded() -> std::time::Duration {
     let mut total_time = std::time::Duration::new(0, 0);
 
     for _ in 0..5 {
-        let data = random_bytes(1024 * 1024 * 512 /* 512MB */);
+        let data = random_bytes(BLOCK_SIZE);
         let start = std::time::Instant::now();
 
         aobscan::PatternBuilder::from_ida_style("48 8B ? ? ? ? ?")

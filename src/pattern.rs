@@ -47,12 +47,45 @@ impl std::error::Error for ObjectError {}
 /// a vector of booleans for the mask, and the number of threads to use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pattern {
-    pub(crate) signature: Vec<u8>,
-    pub(crate) mask: Vec<bool>,
-    pub(crate) threads: usize,
+    signature: Vec<u8>,
+    mask: Vec<bool>,
+    threads: usize,
+    start_offset: usize,
 }
 
 impl Pattern {
+    pub fn new(mut signature: Vec<u8>, mut mask: Vec<bool>, threads: usize) -> Self {
+        // Optimize the pattern by removing the trailing wildcards.
+        //
+        // Example:
+        // - Input:         [? ? 48 8B ? 00 ? ? ?]
+        // - Optimized:     [48 8B ? 00]
+        //
+        // This is done by calculating the actual offsets from the beginning and
+        // end of the pattern, and then slicing the vectors to only keep the
+        // relevant bytes.
+        let mut start_offset = mask.iter().take_while(|&&x| x == false).count();
+        let end_offset = mask.iter().rev().take_while(|&&x| x == false).count();
+
+        // Only resize the vectors if there is at least one non-wildcard byte.
+        // I have no idea why anyone would want to scan for a pattern that is
+        // entirely made of wildcards, but hey, it's their choice.
+        if start_offset != mask.len() {
+            signature = signature[start_offset..signature.len() - end_offset].to_vec();
+            mask = mask[start_offset..mask.len() - end_offset].to_vec();
+        } else {
+            // If the pattern does not have any non-wildcard bytes, we can ignore the offsets.
+            start_offset = 0;
+        }
+
+        Self {
+            signature,
+            mask,
+            threads,
+            start_offset,
+        }
+    }
+
     /// Internal function that calculates the overlapped
     /// data range between N chunks.<br><br>
     ///
@@ -103,6 +136,31 @@ impl Pattern {
         (start, end)
     }
 
+    /// Internal function that scans for the pattern in a chunk of data.<br><br>
+    ///
+    /// # Arguments
+    /// * `data` - The data to scan for the pattern.
+    ///
+    /// # Returns
+    /// True if the pattern was found in the data, false otherwise.
+    fn compare_byte_array(&self, data: &[u8]) -> bool {
+        for (i, sig) in self.signature.iter().enumerate() {
+            // If the mask is false, it means that the byte is a wildcard.
+            // We can skip it.
+            if !self.mask[i] {
+                continue;
+            }
+
+            // If the byte does not match the signature, return false.
+            if data[i] != *sig {
+                return false;
+            }
+        }
+
+        // If we reach this point, it means that the byte array matches the signature.
+        true
+    }
+
     /// Internal function that scans a chunk of data for the pattern.<br><br>
     /// It is executed in parallel by each thread, each with
     /// a different chunk of data.<br><br>
@@ -113,8 +171,6 @@ impl Pattern {
     ///
     /// # Arguments
     /// * `data` - The data to scan.
-    /// * `signature` - The signature to search for.
-    /// * `mask` - The mask to use for the signature.
     /// * `chunk_offset` - Starting offset of the chunk, used to calculate the absolute match address.
     /// * `finished` - The atomic flag used to exit the loop early.
     /// * `callback` - The callback to execute when a match is found.
@@ -123,56 +179,62 @@ impl Pattern {
     /// True if at least one match was found, false otherwise (or if the routine
     /// finished early due to the `finished` flag).
     fn scan_chunk(
+        &self,
         data: &[u8],
-        signature: &[u8],
-        mask: &[bool],
         chunk_offset: usize,
         finished: &Arc<AtomicBool>,
         callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
     ) -> bool {
-        let signature_len = signature.len();
-        let mut found_global = false;
+        // Size of the scan to perform.
+        let length = data.len() - self.signature.len();
 
-        // idea: Store the first non-wildcard byte in the signature, and only
-        // search for that byte first.
-        // This could improve performance by quite a bit.
+        // Store the first byte of the signature to compare it with the data.
+        // This byte is always not masked due to the optimizations in the pattern
+        // creation function, so we can use it to speed up the search.
+        let first_byte = self.signature[0];
+        let first_mask = self.mask[0];
 
-        // Iterate over the chunk data.
-        for i in 0..data.len() - signature_len {
-            let mut found = true;
+        // Result of the scan function.
+        // This is only relative to this chunk, and is used to determine
+        // if at least one match was found in the current function.
+        let mut found = false;
 
+        // Iterate over all the scan data.
+        for i in 0..length {
             // If the running flag is set to false, stop the scan.
             // This is used to stop all threads if a match is found.
-            if finished.load(Ordering::SeqCst) {
-                return found_global;
+            if finished.load(Ordering::Relaxed) {
+                return found;
             }
 
-            // Iterate and compare the signature bytes.
-            for j in 0..signature_len {
-                if data[i + j] != signature[j] && mask[j] == true {
-                    // Break out of the loop if a byte doesn't match.
-                    found = false;
-                    break;
-                }
+            // If the first byte matches, compare the rest of the signature,
+            // otherwise directly skip to the next byte.
+            //
+            // We also check for the first mask so that in the case of a pattern
+            // with all wildcards, we don't skip the first byte.
+            // If the pattern contains at least one non-wildcard byte, the first
+            // byte will never be masked.
+            if data[i] != first_byte && first_mask {
+                continue;
             }
 
-            if found {
+            if self.compare_byte_array(&data[i..]) {
                 // Acquire the mutex and run the scan callback function.
                 // We need to lock the mutex to prevent multiple threads from
                 // running the callback at the same time.
                 // This should not impact performance too much, as the callback
                 // is only executed when a match is found.
-                if !callback.lock().unwrap().deref_mut()(chunk_offset + i) {
+                if !callback.lock().unwrap().deref_mut()(chunk_offset + i - self.start_offset) {
                     // If the callback returns false, stop scanning bet.
-                    finished.store(true, Ordering::SeqCst);
+                    finished.store(true, Ordering::Relaxed);
                     return true;
                 } else {
-                    found_global = true;
+                    found = true;
                 }
             }
         }
 
-        found_global
+        found
     }
 
     /// Performs the AOB scan in the given slice.<br><br>
@@ -240,10 +302,8 @@ impl Pattern {
                         let data = &data[range.0..range.1];
 
                         // Scan the chunk of data.
-                        if Self::scan_chunk(
+                        if self.scan_chunk(
                             data,
-                            &signature,
-                            &mask,
                             range.0,
                             &finished,
                             callback,
@@ -268,10 +328,8 @@ impl Pattern {
         } else {
             // If the scan is single-threaded, avoid the threading clutter and
             // simply scan the data in the current thread.
-            Self::scan_chunk(
+            self.scan_chunk(
                 data,
-                &self.signature,
-                &self.mask,
                 0,
                 &finished,
                 callback_arc,

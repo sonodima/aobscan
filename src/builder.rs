@@ -290,10 +290,6 @@ impl PatternBuilder {
     /// # Returns
     /// The created pattern instance.
     pub fn build(self) -> Pattern {
-        Pattern {
-            signature: self.signature,
-            mask: self.mask,
-            threads: self.threads,
-        }
+        Pattern::new(self.signature, self.mask, self.threads)
     }
 }
