@@ -334,6 +334,12 @@ impl Pattern {
             callback(section_offset + offset, offset)
         }))
     }
+
+    /// # Returns
+    /// The number of threads to use in scans of this pattern.
+    pub fn get_threads(&self) -> usize {
+        self.threads
+    }
 }
 
 impl std::fmt::Display for Pattern {
