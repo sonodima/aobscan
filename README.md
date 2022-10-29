@@ -50,6 +50,8 @@ fn main() {
 }
 ```
 
+### For a real-world example, check out the [AOBscan CLI](https://github.com/sonodima/aobscan-cli) twin project.
+
 ## Benchmark
 
 The results of the `benchmark` example are as follows:
