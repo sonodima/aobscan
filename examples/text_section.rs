@@ -7,7 +7,8 @@
 /// Threading: Single-threaded
 /// Hits: All
 fn main() {
-    let data = std::fs::read("macho_binary").unwrap();
+    // let data = std::fs::read("macho_binary").unwrap();
+    let data = std::fs::read("/Users/tommaso/Desktop/test").unwrap();
     let section_name = "__text";
 
     let scan = aobscan::PatternBuilder::from_ida_style("48 ? ? ? 48")

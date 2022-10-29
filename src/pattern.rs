@@ -5,7 +5,10 @@ use std::sync::{
     Mutex,
 };
 
-use object::{Object, ObjectSection};
+use object::{Architecture, Object, ObjectSection, Section};
+use object::macho::FatHeader;
+use object::read::archive::ArchiveFile;
+use object::read::macho::FatArch;
 
 /// An error in the object pattern scanner.<br>
 /// This encapsulates all possible errors that can occur when scanning for
@@ -193,6 +196,30 @@ impl Pattern {
         }
     }
 
+    fn scan_section(
+        &self,
+        section: &Section,
+        callback: &mut (impl FnMut(usize, usize) -> bool + Send + Sync),
+        archive_id: Option<&str>,
+    ) -> Result<bool, ObjectError> {
+        // Get the data slice of the section.
+        // This is the same as creating another slice from the data slice,
+        // using the section's offset and size.
+        let section_data = section.data()
+            .or(Err(ObjectError::SectionDataNotFound))?;
+
+        // Get the raw file offset of the section.
+        let section_offset = section.file_range()
+            .ok_or(ObjectError::SectionDataNotFound)?.0 as usize;
+
+        // Wrap the callback function to add another argument to it.
+        // This allows us to pass both the section and file offset to the callback.
+        Ok(self.scan(section_data, |offset| {
+            println!("<< {:?} >>", archive_id);
+            callback(section_offset + offset, offset)
+        }))
+    }
+
     /// Performs the AOB scan in the specified object section of the given slice.<br><br>
     ///
     /// This function is useful for restricting the scan to a specific section of
@@ -220,33 +247,77 @@ impl Pattern {
         section_name: &str,
         mut callback: impl FnMut(usize, usize) -> bool + Send + Sync,
     ) -> Result<bool, ObjectError> {
-        // Parse the object file from the data slice.
-        // This operation can fail if the data is not a valid object file.
-        let file = object::File::parse(data)
-            .or(Err(ObjectError::InvalidObject))?;
+        // Different object file formats must be handled individually.
+        // For instance, Mach-O FAT files contain multiple architecture binaries,
+        // and we must scan the section in each one of them.
 
-        // Find the section with the specified name. (name is case-sensitive)
-        // Some binary files may contain multiple sections with the same name;
-        // in this case, the first section with the specified name is used.
-        let section = file.section_by_name(section_name)
-            .ok_or(ObjectError::SectionNotFound)?;
+        // Normal binary files only containing one architecture.
+        if let Ok(file) = object::File::parse(data) {
+            // Find the section with the specified name. (name is case-sensitive)
+            let section = file.section_by_name(section_name)
+                .ok_or(ObjectError::SectionNotFound)?;
 
-        // Get the data slice of the section.
-        // This is the same as creating another slice from the data slice,
-        // using the section's offset and size.
-        let section_data = section.data()
-            .or(Err(ObjectError::SectionDataNotFound))?;
+            // Perform the scan in the section.
+            self.scan_section(&section, &mut callback, None)
+        }
+        // Mach-O 32-bit FAT files.
+        else if let Ok(archive) = FatHeader::parse_arch32(&*data) {
+            // Iterate over the THIN binaries in the FAT file.
+            for arch in archive {
+                // Parse the object file.
+                let file = object::File::parse(
+                    arch.data(&*data).unwrap()
+                ).unwrap();
 
-        // Get the raw file offset of the section.
-        let section_offset = section.file_range()
-            .ok_or(ObjectError::SectionDataNotFound)?.0 as usize;
+                // Find the section with the specified name.
+                let section = file.section_by_name(section_name)
+                    .ok_or(ObjectError::SectionNotFound)?;
 
-        // Wrap the callback function to add another argument to it.
-        // This allows us to pass both the section and file offset to the callback.
-        Ok(self.scan(section_data, |offset| {
-            // section.file_range()
-            callback(section_offset + offset, offset)
-        }))
+                // Perform the scan in the section.
+                self.scan_section(
+                    &section,
+                    &mut callback,
+                    Some(&format!("{:#?}", arch.architecture())),
+                )?;
+            }
+
+            Ok(false)
+        }
+        // Mach-O 64-bit FAT files.
+        else if let Ok(archive) = FatHeader::parse_arch64(&*data) {
+            for arch in archive {
+                println!("Arch: {:#?}", arch.architecture());
+
+                let file = object::File::parse(
+                    arch.data(&*data).unwrap()
+                ).unwrap();
+
+                // todo: scan here
+            }
+
+            Ok(false)
+        }
+        // Partially parsed archive files.
+        else if let Ok(archive) = ArchiveFile::parse(&*data) {
+            println!("Archive File");
+            for member in archive.members() {
+                let member = member.unwrap();
+                println!("Member: {:#?}", member.name());
+
+                let file = object::File::parse(
+                    member.data(&*data).unwrap()
+                ).unwrap();
+
+                println!("Arch: {:?}", file.architecture());
+                // todo: scan here
+            }
+
+            Ok(false)
+        }
+        // Invalid binary file format.
+        else {
+            Err(ObjectError::InvalidObject)
+        }
     }
 
     /// # Returns
