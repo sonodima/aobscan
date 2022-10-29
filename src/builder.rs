@@ -50,6 +50,13 @@ impl From<std::num::ParseIntError> for BuilderError {
 /// Builder for the Pattern struct.<br>
 /// The builder is used to create a Pattern struct with the desired settings.<br><br>
 ///
+/// When building a pattern, (of any kind) the following rules apply:
+/// - The signature must be a valid hexadecimal string. (case-insensitive)
+/// - It might contain wildcards at the beginning and/or end of the string. (which are ignored during the scan)
+///   - In the case of one or more wildcard bytes at the beginning of the string, the resulting address will be offset by the number of wildcards.
+/// (resulting in the address of the first non-wildcard byte minus the wildcard bytes at the beginning)
+///   - End wildcards are ignored during the scan, so the match will be found even if the full pattern would not fit in the remaining bytes.
+///
 /// # Examples
 ///
 /// ## Multi-threaded scan for an IDA-style pattern
