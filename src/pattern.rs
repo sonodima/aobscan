@@ -10,6 +10,27 @@ use object::macho::FatHeader;
 use object::read::archive::ArchiveFile;
 use object::read::macho::FatArch;
 
+/// Information about a match found by the scanner in a section of an object file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SectionResult<'a> {
+    /// The offset of the match in the raw data slice. (archive offset + section offset)
+    pub raw_offset: usize,
+
+    /// The offset of the match in the specified section. (section address + match offset)
+    pub section_offset: usize,
+
+    /// The base address of the specified section.
+    pub section_address: u64,
+
+    /// An identifier for the archive containing the value.<br><br>
+    ///
+    /// # Values
+    /// - `None` if the value is not contained in an archive.
+    /// - `Some(architecture)` if the value is contained a Mach-O archive.
+    /// - `Some(archive_name)` if the value is contained in a partially parsed archive.
+    pub archive_id: Option<&'a str>,
+}
+
 /// An error in the object pattern scanner.<br>
 /// This encapsulates all possible errors that can occur when scanning for
 /// a pattern in an object file.
@@ -199,8 +220,9 @@ impl Pattern {
     fn scan_section(
         &self,
         section: &Section,
-        callback: &mut (impl FnMut(usize, usize) -> bool + Send + Sync),
+        callback: &mut (impl FnMut(SectionResult) -> bool + Send + Sync),
         archive_id: Option<&str>,
+        archive_offset: usize,
     ) -> Result<bool, ObjectError> {
         // Get the data slice of the section.
         // This is the same as creating another slice from the data slice,
@@ -208,15 +230,21 @@ impl Pattern {
         let section_data = section.data()
             .or(Err(ObjectError::SectionDataNotFound))?;
 
-        // Get the raw file offset of the section.
-        let section_offset = section.file_range()
+        // Get the raw file offset of the section. (archive offset + section offset)
+        // In THIN binaries, the archive offset is 0.
+        let section_base = archive_offset + section.file_range()
             .ok_or(ObjectError::SectionDataNotFound)?.0 as usize;
 
         // Wrap the callback function to add another argument to it.
         // This allows us to pass both the section and file offset to the callback.
         Ok(self.scan(section_data, |offset| {
-            println!("<< {:?} >>", archive_id);
-            callback(section_offset + offset, offset)
+            // Call the callback function with all the relevant data.
+            callback(SectionResult {
+                raw_offset: (section_base + offset) as usize,
+                section_offset: offset,
+                section_address: section.address(),
+                archive_id,
+            })
         }))
     }
 
@@ -236,7 +264,7 @@ impl Pattern {
     /// * `data` - The data slice to scan.
     /// * `section_name` - The name of the section to scan. (e.g. `__text`)
     /// * `callback` - The callback to execute when a match is found.
-    ///    - The callback receives the data_offset and section_offset of the match as arguments.
+    ///    - The callback receives a structure containing all the information of the match as argument.
     ///    - It should return `true` to continue scanning, or `false` to stop.
     ///
     /// # Returns
@@ -245,7 +273,7 @@ impl Pattern {
         &self,
         data: &[u8],
         section_name: &str,
-        mut callback: impl FnMut(usize, usize) -> bool + Send + Sync,
+        mut callback: impl FnMut(SectionResult) -> bool + Send + Sync,
     ) -> Result<bool, ObjectError> {
         // Different object file formats must be handled individually.
         // For instance, Mach-O FAT files contain multiple architecture binaries,
@@ -258,7 +286,7 @@ impl Pattern {
                 .ok_or(ObjectError::SectionNotFound)?;
 
             // Perform the scan in the section.
-            self.scan_section(&section, &mut callback, None)
+            self.scan_section(&section, &mut callback, None, 0)
         }
         // Mach-O 32-bit FAT files.
         else if let Ok(archive) = FatHeader::parse_arch32(&*data) {
@@ -278,6 +306,7 @@ impl Pattern {
                     &section,
                     &mut callback,
                     Some(&format!("{:#?}", arch.architecture())),
+                    arch.offset() as usize,
                 )?;
             }
 
