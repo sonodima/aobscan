@@ -12,8 +12,8 @@ use object::{
 };
 
 /// Information about a match found by the scanner in a section of an object file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SectionResult<'a> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SectionResult {
     /// The offset of the match in the raw data slice. (archive offset + section offset)
     pub raw_offset: usize,
 
@@ -28,7 +28,7 @@ pub struct SectionResult<'a> {
     /// # Values
     /// - `None` if the value is not contained in an archive.
     /// - `Some(architecture)` if the value is contained a Mach-O archive.
-    pub archive_id: Option<&'a str>,
+    pub archive_id: Option<String>,
 }
 
 /// An error in the object pattern scanner.<br>
@@ -286,7 +286,7 @@ impl Pattern {
                         // Perform the scan in the section.
                         if self.scan_section(
                             &section,
-                            Some(&format!("{:#?}", arch.architecture())),
+                            Some(format!("{:#?}", arch.architecture())),
                             arch.offset() as usize,
                             &mut callback,
                         )? {
@@ -330,7 +330,7 @@ impl Pattern {
     fn scan_section(
         &self,
         section: &Section,
-        archive_id: Option<&str>,
+        archive_id: Option<String>,
         archive_offset: usize,
         callback: &mut (impl FnMut(SectionResult) -> bool + Send + Sync),
     ) -> Result<bool, ObjectError> {
@@ -353,7 +353,7 @@ impl Pattern {
                 raw_offset: section_base + offset,
                 section_offset: offset,
                 section_address: section.address(),
-                archive_id,
+                archive_id: archive_id.clone(),
             })
         }))
     }

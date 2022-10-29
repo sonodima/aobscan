@@ -1,5 +1,5 @@
 pub use builder::{BuilderError, PatternBuilder};
-pub use pattern::Pattern;
+pub use pattern::{ObjectError, Pattern, SectionResult};
 
 mod builder;
 mod pattern;

@@ -19,7 +19,7 @@ fn main() {
             println!(
                 "{:#02x} [{} {}+{:#02x}]",
                 result.raw_offset,
-                result.archive_id.unwrap_or(""),
+                result.archive_id.unwrap_or("".to_string()),
                 section_name,
                 result.section_offset
             );
