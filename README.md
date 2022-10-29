@@ -54,6 +54,6 @@ fn main() {
 
 The results of the `benchmark` example are as follows:
 
-| CPU                | MT        | ST        |
-|--------------------|-----------|-----------|
-| Apple M1 Pro (10C) | 6.21 GB/s | 0.82 GB/s |
+| CPU                | MT Average | ST Average | MT Peak    |
+|--------------------|------------|------------|------------|
+| Apple M1 Pro (10C) | 10.17 GB/s | 1.42 GB/s  | 12.41 GB/s |
