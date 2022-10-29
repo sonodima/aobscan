@@ -1,7 +1,5 @@
 use std::ops::DerefMut;
-use std::sync::{
-    Arc, atomic::{AtomicBool, AtomicUsize, Ordering}, Mutex,
-};
+use std::sync::{Arc, atomic::{AtomicBool, AtomicUsize, Ordering}, Mutex, PoisonError};
 
 use object::{Object, ObjectSection};
 
@@ -38,6 +36,28 @@ impl std::fmt::Display for ObjectError {
 
 impl std::error::Error for ObjectError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgressEvent {
+    pub(crate) thread: usize,
+    pub(crate) current: usize,
+    pub(crate) total: usize,
+}
+
+impl ProgressEvent {
+    pub(crate) fn new(thread: usize, current: usize, total: usize) -> Self {
+        Self { thread, current, total }
+    }
+
+    pub fn get_thread(&self) -> usize {
+        self.thread
+    }
+
+    pub fn get_progress(&self) -> f32 {
+        self.current as f32 / self.total as f32
+    }
+}
+
+
 /// A pattern that can be used to scan for matches in a byte array.<br><br>
 ///
 /// This is the main type of this crate, and you can create it
@@ -50,9 +70,14 @@ pub struct Pattern {
     pub(crate) signature: Vec<u8>,
     pub(crate) mask: Vec<bool>,
     pub(crate) threads: usize,
+    pub(crate) progress_handler: Option<fn(ProgressEvent)>,
 }
 
 impl Pattern {
+    pub fn with_progress_handler(&mut self, handler: fn(ProgressEvent)) {
+        self.progress_handler = Some(handler);
+    }
+
     /// Internal function that calculates the overlapped
     /// data range between N chunks.<br><br>
     ///
@@ -123,19 +148,21 @@ impl Pattern {
     /// True if at least one match was found, false otherwise (or if the routine
     /// finished early due to the `finished` flag).
     fn scan_chunk(
+        thread_id: usize,
         data: &[u8],
         signature: &[u8],
         mask: &[bool],
         chunk_offset: usize,
         finished: &Arc<AtomicBool>,
         callback: Arc<Mutex<impl FnMut(usize) -> bool + Send + Sync>>,
+        progress_handler: Arc<Mutex<Option<impl FnMut(ProgressEvent) + Send + Sync>>>,
     ) -> bool {
         let signature_len = signature.len();
         let mut found_global = false;
 
-        // idea: Store the first non-wildcard byte in the signature, and only
-        // search for that byte first.
-        // This could improve performance by quite a bit.
+        let has_progress_handler = progress_handler.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some();
 
         // Iterate over the chunk data.
         for i in 0..data.len() - signature_len {
@@ -156,20 +183,46 @@ impl Pattern {
                 }
             }
 
+            // Send a progress event to the progress handler.
+            // This is only done only 100 times per thread, to avoid
+            // spamming the handler with too many unnecessary events.
+            //
+            // Keep in mind that this is thread-independent, so the sent events are
+            // multiplied by the number of threads.
+            if i % (data.len() / 100) == 0 {
+                let progress = ProgressEvent::new(thread_id, i, data.len());
+                let mut progress_handler = progress_handler.lock().unwrap();
+                if let Some(handler) = progress_handler.as_mut() {
+                    handler(progress);
+                }
+            }
+
             if found {
                 // Acquire the mutex and run the scan callback function.
                 // We need to lock the mutex to prevent multiple threads from
                 // running the callback at the same time.
                 // This should not impact performance too much, as the callback
                 // is only executed when a match is found.
-                if !callback.lock().unwrap().deref_mut()(chunk_offset + i) {
+                if !callback.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .deref_mut()(chunk_offset + i) {
                     // If the callback returns false, stop scanning bet.
                     finished.store(true, Ordering::SeqCst);
-                    return true;
+                    found_global = true;
+                    break;
                 } else {
                     found_global = true;
                 }
             }
+        }
+
+        // Send a thread completion event to the progress handler.
+        if let Some(progress_handler) = progress_handler.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut() {
+            progress_handler(
+                ProgressEvent::new(thread_id, data.len(), data.len())
+            );
         }
 
         found_global
@@ -197,6 +250,8 @@ impl Pattern {
         let finished = Arc::new(AtomicBool::new(false));
         // Mutex for the callback function.
         let callback_arc = Arc::new(Mutex::new(callback));
+        // Mutex for the progress handler.
+        let progress_handler = Arc::new(Mutex::new(self.progress_handler));
 
         if self.threads > 1 {
             // If the scan is multi-threaded, split the data into chunks and
@@ -227,11 +282,12 @@ impl Pattern {
                     let signature = self.signature.clone();
                     let mask = self.mask.clone();
 
-                    // Clone the atomic flags and callback function.
+                    // Clone the atomic flags and callback functions.
                     let running_threads = running_threads.clone();
                     let finished = finished.clone();
                     let found = found.clone();
                     let callback = callback_arc.clone();
+                    let progress_handler = progress_handler.clone();
 
                     // Spawn a new worker thread and increment the atomic running thread count.
                     running_threads.fetch_add(1, Ordering::SeqCst);
@@ -241,12 +297,14 @@ impl Pattern {
 
                         // Scan the chunk of data.
                         if Self::scan_chunk(
+                            tc + 1,
                             data,
                             &signature,
                             &mask,
                             range.0,
                             &finished,
                             callback,
+                            progress_handler,
                         ) {
                             // If a match was found, set the found flag to true.
                             found.store(true, Ordering::SeqCst);
@@ -269,12 +327,14 @@ impl Pattern {
             // If the scan is single-threaded, avoid the threading clutter and
             // simply scan the data in the current thread.
             Self::scan_chunk(
+                1,
                 data,
                 &self.signature,
                 &self.mask,
                 0,
                 &finished,
                 callback_arc,
+                progress_handler,
             )
         }
     }

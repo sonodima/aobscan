@@ -294,6 +294,7 @@ impl PatternBuilder {
             signature: self.signature,
             mask: self.mask,
             threads: self.threads,
+            progress_handler: None,
         }
     }
 }
