@@ -15,7 +15,7 @@ categories = ["algorithms"]
 
 
 [dependencies]
-num_cpus = "1.13"
+num_cpus = "1.14"
 object = { version = "0.29", optional = true }
 
 [dev-dependencies]
