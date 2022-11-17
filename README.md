@@ -24,7 +24,7 @@
 - IDA-style patterns: `48 8b ? ? ? 48 8c ?? ?? ?? ??`
 - Code-style signatures/masks: (`\x48\x8b\x00\x00\x00`, `..???`)
 - Hexadecimal strings: `488b??????`
-- Scan for pattern in an object file section _(by name)_
+- Scan for pattern in an object file section _(feature: object-scan)_
 
 ## Usage
 
@@ -32,10 +32,10 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-aobscan = "0.2"
+aobscan = "0.3"
 ```
 
-> <b>Example:</b> Scan for <kbd>48 8B ? ? ?</kbd> in `some.bin` with all the available threads, and stop at the first
+> **Example:** Scan for <kbd>48 8B ? ? ?</kbd> in `some.bin` with all the available threads, and stop at the first
 > match.
 
 ```rust

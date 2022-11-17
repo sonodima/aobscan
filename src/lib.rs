@@ -1,5 +1,9 @@
 pub use builder::{BuilderError, PatternBuilder};
-pub use pattern::{ObjectError, Pattern, SectionResult};
+#[cfg(feature = "object-scan")]
+pub use object_scan::{ObjectError, ObjectScan, SectionResult};
+pub use pattern::Pattern;
 
 mod builder;
+#[cfg(feature = "object-scan")]
+mod object_scan;
 mod pattern;

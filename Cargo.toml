@@ -1,6 +1,6 @@
 [package]
 name = "aobscan"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["sonodima"]
 edition = "2021"
 
@@ -16,7 +16,13 @@ categories = ["algorithms"]
 
 [dependencies]
 num_cpus = "1.13"
-object = "0.29"
+object = { version = "0.29", optional = true }
 
 [dev-dependencies]
 rand = "0.8"
+
+
+[features]
+default = ["object-scan"]
+# Implements pattern scanning in specific object file sections.
+object-scan = ["dep:object"]

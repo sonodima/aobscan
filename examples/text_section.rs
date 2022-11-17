@@ -1,3 +1,5 @@
+use aobscan::ObjectScan;
+
 /// This example demonstrates how to use the `scan_object` function to scan a
 /// specific section in an object file.
 ///
